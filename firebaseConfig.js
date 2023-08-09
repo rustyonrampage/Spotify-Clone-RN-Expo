@@ -8,15 +8,15 @@ import { initializeApp } from "firebase/app";
 
 
 // Your web app's Firebase configuration
-
+console.log(process.env)
 const firebaseConfig = {
 
-    apiKey: process.env.EXPO_FIREBASE_APIKEY,
-    authDomain: process.env.EXPO_FIREBASE_AUTHDOMAIN,
-    projectId: process.env.EXPO_FIREBASE_PROJECTID,
-    storageBucket: process.env.EXPO_FIREBASE_STORAGEBUCKET,
-    messagingSenderId: process.env.EXPO_FIREBASE_MESSAGINGSENDERID,
-    appId: process.env.EXPO_FIREBASE_APPID,
+    apiKey: process.env.EXPO_PUBLIC_FIREBASE_APIKEY,
+    authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTHDOMAIN,
+    projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECTID,
+    storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGEBUCKET,
+    messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGINGSENDERID,
+    appId: process.env.EXPO_PUBLIC_FIREBASE_APPID,
 };
 
 
