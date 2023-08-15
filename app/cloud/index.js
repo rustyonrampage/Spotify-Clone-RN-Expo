@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Slot, Tabs } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { View, StyleSheet, FlatList } from "react-native";
-import { Button, Text, ListItem, Avatar } from "@rneui/themed";
+import { Button, Text, ListItem, Avatar, Dialog } from "@rneui/themed";
 import { LinearProgress } from "@rneui/themed";
 import * as DocumentPicker from "expo-document-picker";
 import { ActivityIndicator } from "react-native";
@@ -13,13 +13,16 @@ import {
   listAll,
   ref,
   uploadBytesResumable,
-  getDownloadURL
+  getDownloadURL,
+  deleteObject,
 } from "firebase/storage";
 
 import app from "../../firebaseConfig";
 import { uriToBlob } from "../../common/utils";
 
-import { AntDesign } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
+import Toast from "../../components/Toast";
+import {SONGS_DIR} from "../../common/consts"
 
 const storage = getStorage(app);
 
@@ -30,6 +33,11 @@ function Cloud() {
   });
 
   const [progress, setProgress] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState({
+    visible: false,
+    isDeleting: false,
+  });
+  const [toast, setToast] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -65,6 +73,8 @@ function Cloud() {
 
   async function docUploadHandler() {
     // TODO: Check for permission
+    setProgress(0.1);
+
     const doc = await DocumentPicker.getDocumentAsync({
       multiple: false,
       type: "audio/mpeg",
@@ -90,6 +100,7 @@ function Cloud() {
           setProgress(false);
         },
         () => {
+          loadData()
           console.log("Upload Done");
           // Handle successful uploads on complete
           // For instance, get the download URL: https://firebasestorage.googleapis.com/...
@@ -127,19 +138,14 @@ function Cloud() {
   };
 
   async function downloadFile(file) {
-    setProgress(0.1)
-    const downloadURL = await getDownloadURL(ref(storage, file.fullPath))
+    setProgress(0.1);
+    const downloadURL = await getDownloadURL(ref(storage, file.fullPath));
     // if songs folder exist
-    await ensureDirExists("spotify-clone/songs");
+    await ensureDirExists(SONGS_DIR);
     // if not create a folder
-    console.log("file", file);
-    console.log(
-      "local path",
-      `${FileSystem.documentDirectory}/spotify-clone/songs/${file.fileName}`
-    );
     const downloadResumable = FileSystem.createDownloadResumable(
       downloadURL,
-      `${FileSystem.documentDirectory}/spotify-clone/songs/${file.fileName}`,
+      `${FileSystem.documentDirectory}/${SONGS_DIR}/${file.fileName}`,
       {},
       callback
     );
@@ -154,26 +160,81 @@ function Cloud() {
     }
   }
 
+  async function deleteFile(file) {
+    // Create a reference to the file to delete
+    const desertRef = ref(storage, file.fullPath);
+
+    // Delete the file
+    deleteObject(desertRef)
+      .then(() => {
+        loadData();
+        setDeleteDialog({ visible: false, isDeleting: false });
+        // File deleted successfully
+      })
+      .catch((error) => {
+        setToast("Error deleting file");
+        setDeleteDialog({ visible: false, isDeleting: false });
+
+        // Uh-oh, an error occurred!
+      });
+  }
+
   const renderItem = ({ item }) => (
-    <ListItem onPress={() => downloadFile(item)}>
+    <ListItem onPress={() => console.log(item)}>
       <ListItem.Content>
         <ListItem.Title>{item.fileName}</ListItem.Title>
       </ListItem.Content>
-      <AntDesign name="clouddownload" size={24} color="black" />
+      <View style={styles.buttonsContainer}>
+        <Button
+          disabled={!!progress}
+          onPress={() => downloadFile(item)}
+          type="solid"
+          buttonStyle={styles.iconButtons}
+        >
+          <Ionicons name="cloud-download" size={18} color="#fff" />
+        </Button>
+        <Button
+          color={"error"}
+          disabled={!!progress}
+          onPress={() => {
+            setDeleteDialog({
+              visible: item,
+              isDeleting: false,
+            });
+          }}
+          type="solid"
+          buttonStyle={styles.iconButtons}
+        >
+          <Ionicons name="trash" size={18} color="#fff" />
+        </Button>
+      </View>
     </ListItem>
   );
 
   return (
     <View style={styles.container}>
       <Text>Manage Cloud Data</Text>
+      <Toast
+        visible={toast}
+        duration={1000}
+        text={toast}
+        isClosable={true}
+        onClose={() => setToast(false)}
+      />
       {songs?.loading ? (
-        <ActivityIndicator color="#2089dc" />
-      ) : (
+        <View style={styles.fullView}>
+          <ActivityIndicator color="#2089dc" />
+        </View>
+      ) : songs?.data?.length > 0 ? (
         <FlatList
           keyExtractor={(item, index) => index.toString()}
           data={songs?.data}
           renderItem={renderItem}
         />
+      ) : (
+        <View style={styles.fullView}>
+          <Text>No songs found</Text>
+        </View>
       )}
 
       {!!progress && (
@@ -189,6 +250,32 @@ function Cloud() {
         onPress={docUploadHandler}
         disabled={!!progress}
       />
+      <Dialog
+        isVisible={!!deleteDialog.visible}
+        onBackdropPress={() => {
+          if (deleteDialog.isDeleting) return;
+          setDeleteDialog({ visible: false, isDeleting: false });
+        }}
+      >
+        <Dialog.Title title="Delete Song" />
+        <Text>Are you sure you want to delete a song from the cloud?</Text>
+
+        <Dialog.Actions>
+          <Dialog.Button
+            title="CONFIRM"
+            onPress={() => {
+              deleteFile(deleteDialog.visible);
+            }}
+          />
+          <Dialog.Button
+            disabled={deleteDialog.isDeleting}
+            title="CANCEL"
+            onPress={() =>
+              setDeleteDialog({ visible: false, isDeleting: false })
+            }
+          />
+        </Dialog.Actions>
+      </Dialog>
     </View>
   );
 }
@@ -199,8 +286,25 @@ const styles = StyleSheet.create({
     padding: 20,
     justifyContent: "space-between",
   },
+  fullView: {
+    display: "flex",
+    flexGrow: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   progress: {
     marginBottom: 6,
+  },
+  iconButtons: {
+    height: 36,
+    width: 36,
+    borderRadius: 40,
+    padding: 0,
+  },
+  buttonsContainer: {
+    display: "flex",
+    flexDirection: "row",
+    gap: 4,
   },
 });
 
